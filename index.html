@@ -430,4 +430,214 @@ onAuthStateChanged(auth, user => {
         }));
 
         // Ecoute de l'historique des investissements/achats en temps réel
+        cone." };
+            t.update(ref, { bal: b - v.p });
+            
+            const newBuyRef = doc(collection(fs, "purchases"));
+            t.set(newBuyRef, {
+                uid: auth.currentUser.uid,
+                n: v.n,
+                p: v.p,
+                d: v.d,
+                t: D(),
+                ts: Date.now(),
+                daysLeft: 31
+            });
+        });
+        go("achats");
+    } catch(e) {
+        err(e.message||"Erreur lors de l'achat.");
+    }
+};
+
+const pages={
+    signup:()=>`<h1>Avenir Capital</h1><p class="mu">Créez votre compte pour commencer à investir.</p><div class="card">
+        <label>Nom complet</label><input id="n">
+        <label>Numéro de téléphone</label><input id="ph" type="tel">
+        <label>Mot de passe</label><input id="pw" type="password">
+        <div id="err" class="err"></div>
+        <button class="btn" onclick="signup()">S’inscrire</button>
+    </div>
+    <button class="btn sec" onclick="go('login')">J’ai déjà un compte</button>`,
+
+    login:()=>`<h1>Avenir Capital</h1><div class="card">
+        <label>Numéro de téléphone</label><input id="ph" type="tel">
+        <label>Mot de passe</label><input id="pw" type="password">
+        <div id="err" class="err"></div>
+        <button class="btn" onclick="login()">Se connecter</button>
+    </div>
+    <button class="btn sec" onclick="go('signup')">Créer un compte</button>`,
+
+    home:()=>{
+        const u=U();
+        return `<h2>Bonjour ${esc(u.name)} 👋</h2>
+        <div class="hero"><small>Solde disponible</small><b>${F(u.bal)}</b></div>
+        
+        <div class="grid">
+            <button onclick="go('recharge')">➕<br>Recharger</button>
+            <button onclick="go('withdraw')">💸<br>Retirer</button>
+            <button onclick="go('invest')">📈<br>Investir</button>
+            <button onclick="go('share')">🔗<br>Partager</button>
+        </div>
+        <button class="li" onclick="go('histRec')">Historique des recharges <span>›</span></button>
+        <button class="li" onclick="go('histRet')">Historique des retraits <span>›</span></button>
+        <button class="li" onclick="go('histGain')">Historique des gains <span>›</span></button>
+        <button class="li" onclick="go('account')">Mon compte <span>›</span></button>`;
+    },
+
+    share:()=>`${back()}<h2>Partager l'application</h2>
+    <div class="card">
+        <h3>🔗 Adresse officielle</h3>
+        <div class="ref-box">
+            <input type="text" value="${SITE_URL}" readonly id="site-link">
+            <button class="copy-btn" onclick="copierLien()">Copier</button>
+        </div>
+        <p class="mu">Partagez cette adresse avec vos proches pour leur faire découvrir Avenir Capital !</p>
+    </div>`,
+
+    invest:()=>`<h2>Investir</h2>`+VIP.map((v,i)=>`<div class="card">
+        <div class="row"><b>${v.n}</b><b>${F(v.p)}</b></div>
+        <p class="mu">Revenu : ${F(v.d)} chaque jour pendant 31 jours<br>Total : ${F(v.d*31)}</p>
+        <button class="btn" onclick="buy(${i})">Investir</button>
+    </div>`).join("")+`<div id="err" class="err"></div>`,
+
+    achats:()=>{
+        const b=U().buys;
+        return `2>Mes achats</h2>`+(b.length?b.map(x=>`<div class="card">
+            <div class="row"><b>${esc(x.n)}</b><span class="tag pr">${(x.daysLeft ?? 31) > 0 ? "Actif" : "Terminé"}</span></div>
+            <div class="mu">Investi : ${F(x.p)} · ${F(x.d)}/jour<br>Acheté le ${esc(x.t)}</div>
+        </div>`).join(""):`<p class="mu">Aucun achat pour le moment.</p>`);
+    },
+
+    account:()=>{
+        const u=U();
+        return `<h2>Mon compte</h2>
+        <div class="card">
+            <b>${esc(u.name)}</b>
+            <div class="mu">${esc(me.phone)} · Solde ${F(u.bal)}</div>
+        </div>`+[
+            ["histRec","Historique des recharges"],
+            ["histRet","Historique des retraits"],
+            ["histGain","Historique des gains"],
+            ["achats","Mes investissements"],
+            ["share","Partager l'application"],
+            ["link","Lier mon compte de retrait"],
+            ["card","Ma méthode de paiement"],
+            ["service","Service client"]
+        ].map(x=>`<button class="li" onclick="go('${x[0]}')">${x[1]} <span>›</span></button>`).join("")+
+        `<button class="btn out" onclick="logout()">Se déconnecter</button>`;
+    },
+
+    recharge:()=>`${back()}<h2>Recharger</h2><div class="card">
+        <label>Montant (minimum 1 000 F)</label>
+        <input id="a" type="number" inputmode="numeric" value="${T.amt||""}">
+        <div class="chips">${[5000,10000,50000,100000].map(v=>`<button onclick="document.getElementById('a').value=${v}">${v.toLocaleString("fr-FR")}</button>`).join("")}</div>
+        <div id="err" class="err"></div>
+        <button class="btn" onclick="toMethod()">Confirmer</button>
+    </div>`,
+
+    method:()=>`${back("recharge")}<h2>Choisir la méthode</h2>
+    <p class="mu">Montant : <b>${F(T.amt)}</b></p>`+METH.map(m=>m=="Wave"?
+        `<button class="li wave" onclick="go('pay')"><b>Wave</b><span>›</span></button>`:
+        `<button class="li off" onclick="err('${m} : indisponible pour le moment. Utilisez Wave.')"><b>${m}</b><span>Indisponible</span></button>`
+    ).join("")+`<div id="err" class="err"></div>`,
+
+    pay:()=>`${back("method")}<h2>Paiement Wave</h2>
+    <div class="card wave">
+        <p class="mu">Copiez le numéro et effectuez votre paiement de <b>${F(T.amt)}</b></p>
+        <div class="row"><span class="num">${WAVE_NUM}</span>
+        <button class="btn sec" style="width:auto;padding:10px 14px" onclick="copyN()" id="cp">Copier</button></div>
+    </div>
+    <div class="card">
+        <label>Votre numéro de paiement</label><input id="pn" type="tel">
+        <label>ID de la transaction</label><input id="tx">
+        <div id="err" class="err"></div>
+        <button class="btn" onclick="confirmPay()">Confirmer le paiement</button>
+    </div>`,
+
+    histRec:()=>`${back("account")}<h2>Historique des recharges</h2>`+hist(U().recs,"Aucune recharge."),
+    histRet:()=>`${back("account")}<h2>Historique des retraits</h2>`+hist(U().rets,"Aucun retrait."),
+    histGain:()=>`${back("account")}<h2>Historique des gains</h2>`+(U().gains.length?U().gains.map(x=>`<div class="card row"><div><b>+${F(x.a)}</b><div class="mu">Gain journalier · ${esc(x.t)}</div></div><span class="tag pr">Crédité</span></div>`).join(""):`<p class="mu">Aucun gain pour le moment.</p>`),
+
+    withdraw:()=>{
+        const c=U().card;
+        return `${back()}<h2>Retirer</h2><div class="card">
+            <p class="mu">Solde disponible : ${F(U().bal)}</p>
+            <label>Montant (minimum 1 000 F)</label><input id="a" type="number" inputmode="numeric">
+            <label>Votre numéro</label><input id="pn" type="tel" value="${c?esc(c.num):""}">
+            <div id="err" class="err"></div>
+            <button class="btn" onclick="doWd()">Confirmer le retrait</button>
+        </div>`;
+    },
+
+    link:()=>`${back("account")}<h2>Lier mon compte de retrait</h2><div class="card">
+        <label>Méthode</label><select id="m">${METH.map(m=>`<option>${m}</option>`).join("")}</select>
+        <label>Numéro</label><input id="pn" type="tel">
+        <div id="err" class="err"></div>
+        <button class="btn" onclick="doLink()">Confirmer</button>
+    </div>`,
+
+    card:()=>{
+        const c=U().card;
+        return `${back("account")}<h2>Ma méthode de paiement</h2>`+
+        (c?`<div class="hero"><small>${esc(c.m)}</small><b>${esc(c.num)}</b><small>${esc(U().name)}</small></div>`:
+        `<p class="mu">Aucune méthode liée.</p><button class="btn" onclick="go('link')">Lier un compte</button>`);
+    },
+
+    service:()=>`${back("account")}<h2>Service client</h2><div class="card">
+        <p class="mu">Une question ? Besoin d'aide ? Écrivez-nous directement sur WhatsApp.</p>
+        <a class="btn" style="display:block;text-align:center;text-decoration:none" href="${SUPPORT}" target="_blank" rel="noopener">💬 Contacter sur WhatsApp</a>
+        <p class="mu" style="margin-top:12px">Disponible tous les jours pour vous aider.</p>
+    </div>`
+};
+
+function render(){
+    const app=document.getElementById("app"),n=document.getElementById("nav");
+    if(loading){
+        app.innerHTML='<div class="loader-box"><h1>Avenir Capital</h1><p class="mu">Chargement en cours…</p></div>';
+        n.style.display="none";
+        return;
+    }
+    
+    if(!U()){
+        if(P !== "login" && P !== "signup") P = "signup";
+    } else {
+        if(P === "signup" || P === "login") P = "home";
+    }
+
+    app.innerHTML=pages[P]?pages[P]():pages["home"]();
+    
+    const tabs=[["home","🏠","Accueil"],["invest","📈","Investir"],["share","🔗","Partager"],["achats","🧾","Achats"],["account","👤","Compte"]];
+    n.style.display=U()?"flex":"none";
+    n.innerHTML=tabs.map(t=>`<button class="${t[0]==P?"on":""}" onclick="go('${t[0]}')"><span>${t[1]}</span>${t[2]}</button>`).join("");
+}
+
+onAuthStateChanged(auth, user => {
+    unsubs.forEach(u=>u());
+    unsubs=[];
+    recs = []; rets = []; buys = []; gains = [];
+    
+    if(user){
+        // Ecoute de l'utilisateur
+        unsubs.push(onSnapshot(doc(fs, "users", user.uid), snap => {
+            ud = snap.exists() ? snap.data() : null;
+            loading = false;
+            render();
+        }));
+
+        // Ecoute de l'historique des recharges en temps réel
+        const qRec = query(collection(fs, "recharges"), where("uid", "==", user.uid));
+        unsubs.push(onSnapshot(qRec, snap => {
+            recs = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+            render();
+        }));
+
+        // Ecoute de l'historique des retraits en temps réel
+        const qWd = query(collection(fs, "withdrawals"), where("uid", "==", user.uid));
+        unsubs.push(onSnapshot(qWd, snap => {
+            rets = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+            render();
+        }));
+
+        // Ecoute de l'historique des investissements/achats en temps réel
         con
