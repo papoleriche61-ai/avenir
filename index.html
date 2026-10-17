@@ -29,7 +29,8 @@
                 --bd:#213354;
             }
         }
-        *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,sans-serif;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+        *{box-sizing:border-box}
+        body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,sans-serif;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
         #app{max-width:480px;margin:auto;padding:16px}
         h1,h2{margin:0 0 12px}h2{font-size:20px}
         .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
@@ -57,9 +58,6 @@
         .ref-box{background:var(--pr2);border-radius:10px;padding:12px;display:flex;align-items:center;gap:8px;margin:10px 0}
         .ref-box input{flex:1;margin:0;border:none;background:transparent;color:var(--pr);font-weight:600;padding:0}
         .copy-btn{background:var(--pr);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
-        .stat-card{background:var(--card);border-radius:12px;padding:12px;text-align:center;border:1px solid var(--bd)}
-        .stat-card .v{font-size:22px;font-weight:bold;color:var(--pr)}
-        .stat-card .l{font-size:12px;color:var(--mu)}
         a{text-decoration:none}
         .loader-box{text-align:center;padding:40px 10px;}
     </style>
@@ -71,9 +69,8 @@
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,doc,setDoc,onSnapshot,collection,query,where,addDoc,runTransaction} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,setDoc,onSnapshot,collection,addDoc,runTransaction,query,where,orderBy} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/* Config Firebase */
 const firebaseConfig={
     apiKey:"AIzaSyC8jUCtIrHrySXzNAXTdRTaCBTNgEirS8w",
     authDomain:"avenir-capital.firebaseapp.com",
@@ -93,26 +90,17 @@ const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
 const fs=getFirestore(app);
 
-function getRefFromURL(){
-    const params=new URLSearchParams(window.location.search);
-    return params.get("ref")||"";
-}
-const REF_URL=getRefFromURL();
-
 const em=p=>p.replace(/\D/g,"")+"@avenir.app";
-let ud=null,recs=[],rets=[],buys=[],gains=[],teamN=0,unsubs=[],loading=true,P="signup",T={};
+let ud=null,recs=[],rets=[],buys=[],gains=[],unsubs=[],loading=true,P="signup",T={};
 const me=new Proxy({},{get:(_,k)=>(ud||{})[k]});
-const U=()=>ud&&{...ud,recs,rets,buys,gains,teamN};
-const F=n=>Number(n).toLocaleString("fr-FR")+" F";
+const U=()=>ud&&{...ud,recs,rets,buys,gains};
+const F=n=>Number(n||0).toLocaleString("fr-FR")+" F";
 const D=()=>new Date().toLocaleDateString("fr-FR");
 const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $=id=>document.getElementById(id)?document.getElementById(id).value.trim():"";
-const getRefLink=()=>ud?`${SITE_URL}?ref=${ud.phone}`:"";
 
 window.copierLien = function(){
-    const lien=getRefLink();
-    if(!lien)return;
-    navigator.clipboard.writeText(lien).then(()=>alert("✅ Lien copié ! Partage-le avec tes amis !")).catch(()=>{});
+    navigator.clipboard.writeText(SITE_URL).then(()=>alert("✅ Lien copié !")).catch(()=>{});
 };
 
 window.copyN = function(){
@@ -132,16 +120,15 @@ const msg=e=>({
 }[e.code]||("Erreur : "+(e.code||e.message)));
 
 const back=(p="home")=>`<button class="back" onclick="go('${p}')">‹ Retour</button>`;
-const hist=(a,empty)=>a.length?a.map(x=>`<div class="card row"><div><b>${F(x.a)}</b><div class="mu">${x.m} · ${x.t}</div></div><span class="tag">${x.s||"En attente"}</span></div>`).join(""):`<p class="mu">${empty}</p>`;
+const hist=(a,empty)=>a.length?a.map(x=>`<div class="card row"><div><b>${F(x.a)}</b><div class="mu">${x.m||"Wave"} · ${x.t||""}</div></div><span class="tag">${x.s||"En attente"}</span></div>`).join(""):`<p class="mu">${empty}</p>`;
 
-/* Actions d'authentification et transactions */
 window.signup = async function(){
-    const name = $("n"), phone = $("ph"), pw = $("pw"), ref = $("rf");
-    if(!name || !phone || !pw){ return err("Veuillez remplir tous les champs."); }
+    const n = $("n"), p = $("ph"), w = $("pw");
+    if(!n || p.length < 8 || w.length < 6) return err("Remplissez tous les champs (mot de passe : 6 caractères minimum).");
     try {
-        const res = await createUserWithEmailAndPassword(auth, em(phone), pw);
-        await setDoc(doc(fs, "users", res.user.uid), {
-            name, phone, bal: 0, ref: ref || null, createdAt: Date.now()
+        const c = await createUserWithEmailAndPassword(auth, em(p), w);
+        await setDoc(doc(fs, "users", c.user.uid), {
+            name: n, phone: p, bal: 0, card: null, ts: Date.now()
         });
     } catch(e) {
         err(msg(e));
@@ -149,10 +136,8 @@ window.signup = async function(){
 };
 
 window.login = async function(){
-    const phone = $("ph"), pw = $("pw");
-    if(!phone || !pw){ return err("Veuillez remplir tous les champs."); }
     try {
-        await signInWithEmailAndPassword(auth, em(phone), pw);
+        await signInWithEmailAndPassword(auth, em($("ph")), $("pw"));
     } catch(e) {
         err(msg(e));
     }
@@ -163,48 +148,103 @@ window.logout = function(){
 };
 
 window.toMethod = function(){
-    const amt = Number($("a"));
-    if(!amt || amt < 1000) return err("Montant minimum : 1 000 F");
-    go('method', {amt});
+    const a = +$("a");
+    if(a < 1000) return err("Montant minimum : 1 000 F.");
+    T.amt = a;
+    go("method");
 };
 
-window.confirmPay = function(){
-    const pn = $("pn"), tx = $("tx");
-    if(!pn || !tx) return err("Veuillez remplir tous les champs.");
-    alert("Recharge soumise avec succès ! En cours de validation.");
-    go('home');
+window.confirmPay = async function(){
+    const p = $("pn"), t = $("tx");
+    if(p.length < 8 || t.length < 4) return err("Entrez votre numéro et l'ID de transaction.");
+    try {
+        await addDoc(collection(fs, "recharges"), {
+            uid: auth.currentUser.uid,
+            a: T.amt,
+            m: "Wave · " + esc(p) + " · ID " + esc(t),
+            pn: p,
+            tx: t,
+            t: D(),
+            ts: Date.now(),
+            s: "En attente"
+        });
+        go("histRec");
+        alert("✅ Demande enregistrée ! Le solde sera crédité après vérification.");
+    } catch(e) {
+        err(msg(e));
+    }
 };
 
-window.doWd = function(){
-    const amt = Number($("a")), pn = $("pn");
-    if(!amt || amt < 1000) return err("Montant minimum : 1 000 F");
-    if(!pn) return err("Veuillez entrer votre numéro.");
-    alert("Demande de retrait enregistrée.");
-    go('home');
+window.doWd = async function(){
+    const a = +$("a"), p = $("pn"), ref = doc(fs, "users", auth.currentUser.uid);
+    if(a < 1000) return err("Montant minimum : 1 000 F.");
+    if(p.length < 8) return err("Entrez un numéro valide.");
+    try {
+        await runTransaction(fs, async t => {
+            const snap = await t.get(ref);
+            const b = snap.exists() ? (snap.data().bal || 0) : 0;
+            if(b < a) throw { message: "Solde insuffisant." };
+            t.update(ref, { bal: b - a });
+            
+            const newWdRef = doc(collection(fs, "withdrawals"));
+            t.set(newWdRef, {
+                uid: auth.currentUser.uid,
+                a: a,
+                m: esc(p),
+                pn: p,
+                t: D(),
+                ts: Date.now(),
+                s: "En attente"
+            });
+        });
+        go("histRet");
+        alert("✅ Demande de retrait envoyée !");
+    } catch(e) {
+        err(e.message||"Erreur lors du retrait.");
+    }
 };
 
-window.doLink = function(){
-    const m = $("m"), pn = $("pn");
-    if(!pn) return err("Veuillez entrer un numéro.");
-    alert("Méthode liée avec succès !");
-    go('account');
+window.doLink = async function(){
+    const p = $("pn");
+    if(p.length < 8) return err("Entrez un numéro valide.");
+    await setDoc(doc(fs, "users", auth.currentUser.uid), {
+        card: { m: $("m"), num: p }
+    }, { merge: true });
+    go("card");
+    alert("✅ Compte lié avec succès !");
 };
 
-window.buy = function(i){
-    const v = VIP[i];
-    if(ud.bal < v.p) return err("Solde insuffisant. Veuillez recharger.");
-    alert(`Investissement ${v.n} réussi !`);
+window.buy = async function(i){
+    const v = VIP[i], ref = doc(fs, "users", auth.currentUser.uid);
+    try {
+        await runTransaction(fs, async t => {
+            const snap = await t.get(ref);
+            const b = snap.exists() ? (snap.data().bal || 0) : 0;
+            if(b < v.p) throw { message: "Solde insuffisant. Rechargez votre compte." };
+            t.update(ref, { bal: b - v.p });
+            
+            const newBuyRef = doc(collection(fs, "purchases"));
+            t.set(newBuyRef, {
+                uid: auth.currentUser.uid,
+                n: v.n,
+                p: v.p,
+                d: v.d,
+                t: D(),
+                ts: Date.now(),
+                daysLeft: 31
+            });
+        });
+        go("achats");
+    } catch(e) {
+        err(e.message||"Erreur lors de l'achat.");
+    }
 };
 
-/* Pages */
 const pages={
     signup:()=>`<h1>Avenir Capital</h1><p class="mu">Créez votre compte pour commencer à investir.</p><div class="card">
         <label>Nom complet</label><input id="n">
         <label>Numéro de téléphone</label><input id="ph" type="tel">
         <label>Mot de passe</label><input id="pw" type="password">
-        <label>Code d’invitation</label>
-        <input id="rf" placeholder="Numéro du parrain" value="${esc(REF_URL)}">
-        ${REF_URL?`<p style="color:var(--pr);font-size:13px;margin:4px 0">✅ Invitation détectée ! Merci au parrain !</p>`:""}
         <div id="err" class="err"></div>
         <button class="btn" onclick="signup()">S’inscrire</button>
     </div>
@@ -227,7 +267,7 @@ const pages={
             <button onclick="go('recharge')">➕<br>Recharger</button>
             <button onclick="go('withdraw')">💸<br>Retirer</button>
             <button onclick="go('invest')">📈<br>Investir</button>
-            <button onclick="go('team')">👥<br>Inviter</button>
+            <button onclick="go('share')">🔗<br>Partager</button>
         </div>
         <button class="li" onclick="go('histRec')">Historique des recharges <span>›</span></button>
         <button class="li" onclick="go('histRet')">Historique des retraits <span>›</span></button>
@@ -235,28 +275,15 @@ const pages={
         <button class="li" onclick="go('account')">Mon compte <span>›</span></button>`;
     },
 
-    team:()=>{
-        const u=U(),lien=getRefLink();
-        return `${back()}<h2>Mon Parrainage</h2>
-        <div class="card">
-            <h3>🔗 Mon lien d'invitation</h3>
-            <div class="ref-box">
-                <input type="text" value="${esc(lien)}" readonly id="ref-link">
-                <button class="copy-btn" onclick="copierLien()">Copier</button>
-            </div>
-            <p class="mu">Partage ce lien pour inviter tes amis à nous rejoindre !</p>
+    share:()=>`${back()}<h2>Partager l'application</h2>
+    <div class="card">
+        <h3>🔗 Adresse officielle</h3>
+        <div class="ref-box">
+            <input type="text" value="${SITE_URL}" readonly id="site-link">
+            <button class="copy-btn" onclick="copierLien()">Copier</button>
         </div>
-        <div class="stat-card" style="margin-bottom:12px">
-            <div class="v">${teamN}</div>
-            <div class="l">Amis invités</div>
-        </div>
-        <div class="card">
-            <h3>📋 Comment ça marche ?</h3>
-            <p class="mu"><strong>1.</strong> Copie ton lien : <code style="background:var(--pr2);padding:2px 6px;border-radius:4px">${SITE_URL}?ref=TonNuméro</code><br>
-            <strong>2.</strong> Partage-le autour de toi<br>
-            <strong>3.</strong> Ton ami clique → s'inscrit → ton numéro est automatiquement pré-rempli ✅</p>
-        </div>`;
-    },
+        <p class="mu">Partagez cette adresse avec vos proches pour leur faire découvrir Avenir Capital !</p>
+    </div>`,
 
     invest:()=>`<h2>Investir</h2>`+VIP.map((v,i)=>`<div class="card">
         <div class="row"><b>${v.n}</b><b>${F(v.p)}</b></div>
@@ -265,7 +292,11 @@ const pages={
     </div>`).join("")+`<div id="err" class="err"></div>`,
 
     achats:()=>{
-        return `<h2>Mes achats</h2><p class="mu">Aucun achat pour le moment.</p>`;
+        const b=U().buys;
+        return `2>Mes achats</h2>`+(b.length?b.map(x=>`<div class="card">
+            <div class="row"><b>${esc(x.n)}</b><span class="tag pr">${(x.daysLeft ?? 31) > 0 ? "Actif" : "Terminé"}</span></div>
+            <div class="mu">Investi : ${F(x.p)} · ${F(x.d)}/jour<br>Acheté le ${esc(x.t)}</div>
+        </div>`).join(""):`<p class="mu">Aucun achat pour le moment.</p>`);
     },
 
     account:()=>{
@@ -279,7 +310,7 @@ const pages={
             ["histRet","Historique des retraits"],
             ["histGain","Historique des gains"],
             ["achats","Mes investissements"],
-            ["team","Inviter un ami"],
+            ["share","Partager l'application"],
             ["link","Lier mon compte de retrait"],
             ["card","Ma méthode de paiement"],
             ["service","Service client"]
@@ -314,15 +345,16 @@ const pages={
         <button class="btn" onclick="confirmPay()">Confirmer le paiement</button>
     </div>`,
 
-    histRec:()=>`<h2>Historique des recharges</h2><p class="mu">Aucune recharge.</p>`,
-    histRet:()=>`<h2>Historique des retraits</h2><p class="mu">Aucun retrait.</p>`,
-    histGain:()=>`<h2>Historique des gains</h2><p class="mu">Aucun gain pour le moment.</p>`,
+    histRec:()=>`${back("account")}<h2>Historique des recharges</h2>`+hist(U().recs,"Aucune recharge."),
+    histRet:()=>`${back("account")}<h2>Historique des retraits</h2>`+hist(U().rets,"Aucun retrait."),
+    histGain:()=>`${back("account")}<h2>Historique des gains</h2>`+(U().gains.length?U().gains.map(x=>`<div class="card row"><div><b>+${F(x.a)}</b><div class="mu">Gain journalier · ${esc(x.t)}</div></div><span class="tag pr">Crédité</span></div>`).join(""):`<p class="mu">Aucun gain pour le moment.</p>`),
 
     withdraw:()=>{
+        const c=U().card;
         return `${back()}<h2>Retirer</h2><div class="card">
             <p class="mu">Solde disponible : ${F(U().bal)}</p>
             <label>Montant (minimum 1 000 F)</label><input id="a" type="number" inputmode="numeric">
-            <label>Votre numéro</label><input id="pn" type="tel">
+            <label>Votre numéro</label><input id="pn" type="tel" value="${c?esc(c.num):""}">
             <div id="err" class="err"></div>
             <button class="btn" onclick="doWd()">Confirmer le retrait</button>
         </div>`;
@@ -336,8 +368,10 @@ const pages={
     </div>`,
 
     card:()=>{
-        return `${back("account")}<h2>Ma méthode de paiement</h2>
-        <p class="mu">Aucune méthode liée.</p><button class="btn" onclick="go('link')">Lier un compte</button>`;
+        const c=U().card;
+        return `${back("account")}<h2>Ma méthode de paiement</h2>`+
+        (c?`<div class="hero"><small>${esc(c.m)}</small><b>${esc(c.num)}</b><small>${esc(U().name)}</small></div>`:
+        `<p class="mu">Aucune méthode liée.</p><button class="btn" onclick="go('link')">Lier un compte</button>`);
     },
 
     service:()=>`${back("account")}<h2>Service client</h2><div class="card">
@@ -355,44 +389,45 @@ function render(){
         return;
     }
     
-    if(!ud){
+    if(!U()){
         if(P !== "login" && P !== "signup") P = "signup";
     } else {
         if(P === "signup" || P === "login") P = "home";
     }
 
-    if(pages[P]) {
-        app.innerHTML=pages[P]();
-    } else {
-        app.innerHTML=pages["home"]();
-    }
+    app.innerHTML=pages[P]?pages[P]():pages["home"]();
     
-    const tabs=[["home","🏠","Accueil"],["invest","📈","Investir"],["team","👥","Inviter"],["achats","🧾","Achats"],["account","👤","Compte"]];
-    n.style.display=ud?"flex":"none";
+    const tabs=[["home","🏠","Accueil"],["invest","📈","Investir"],["share","🔗","Partager"],["achats","🧾","Achats"],["account","👤","Compte"]];
+    n.style.display=U()?"flex":"none";
     n.innerHTML=tabs.map(t=>`<button class="${t[0]==P?"on":""}" onclick="go('${t[0]}')"><span>${t[1]}</span>${t[2]}</button>`).join("");
 }
 
-onAuthStateChanged(auth, u => {
-    unsubs.forEach(f=>f());
+onAuthStateChanged(auth, user => {
+    unsubs.forEach(u=>u());
     unsubs=[];
-    ud=null; recs=[]; rets=[]; buys=[]; gains=[]; teamN=0;
+    recs = []; rets = []; buys = []; gains = [];
     
-    if(!u){
-        loading=false;
-        P="signup";
-        render();
-        return;
-    }
-    
-    const userRef = doc(fs, "users", u.uid);
-    unsubs.push(onSnapshot(userRef, snap => {
-        if(snap.exists()){
-            ud = { ...snap.data(), id: u.uid };
-        }
-        loading = false;
-        render();
-    }));
-});
-</script>
-</body>
-</html>
+    if(user){
+        // Ecoute de l'utilisateur
+        unsubs.push(onSnapshot(doc(fs, "users", user.uid), snap => {
+            ud = snap.exists() ? snap.data() : null;
+            loading = false;
+            render();
+        }));
+
+        // Ecoute de l'historique des recharges en temps réel
+        const qRec = query(collection(fs, "recharges"), where("uid", "==", user.uid));
+        unsubs.push(onSnapshot(qRec, snap => {
+            recs = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+            render();
+        }));
+
+        // Ecoute de l'historique des retraits en temps réel
+        const qWd = query(collection(fs, "withdrawals"), where("uid", "==", user.uid));
+        unsubs.push(onSnapshot(qWd, snap => {
+            rets = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+            render();
+        }));
+
+        // Ecoute de l'historique des investissements/achats en temps réel
+        con
